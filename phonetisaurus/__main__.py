@@ -6,6 +6,7 @@ import os
 import platform
 import sys
 import time
+import typing
 from pathlib import Path
 
 from . import load_lexicon, maybe_gzip_open, predict, train
@@ -67,49 +68,80 @@ def main():
         if lexicon:
             _LOGGER.debug("Loaded pronunciations for %s word(s)", len(lexicon))
 
-        # Get words from arguments or stdin
-        if args.words:
-            words = args.words
-        else:
-            if os.isatty(sys.stdin.fileno()):
-                print("Reading words from stdin. CTRL+D to end.", file=sys.stderr)
+        def guess_words(words: typing.List[str]):
+            """Look up or guess word pronunciations"""
+            words_to_guess = []
 
-            words = []
-            for word in sys.stdin:
+            for word in words:
                 word = word.strip()
                 if casing:
                     word = casing(word)
 
-                words.append(word)
-
-        if lexicon:
-            # Try to look up first in the lexicon
-            unknown_words = []
-            num_known_words = 0
-            for word in words:
-                word_prons = lexicon.get(word)
-                if word_prons:
-                    for word_pron in word_prons[: args.nbest]:
-                        pron_str = " ".join(word_pron)
-                        print(word, pron_str, sep=args.word_separator)
-                        num_known_words += 1
+                if lexicon:
+                    # Try to look up first in the lexicon
+                    word_prons = lexicon.get(word)
+                    if word_prons:
+                        for word_pron in word_prons[: args.nbest]:
+                            pron_str = " ".join(word_pron)
+                            print(word, pron_str, sep=args.word_separator)
+                    else:
+                        # Will need to guess
+                        words_to_guess.append(word)
                 else:
-                    # Will need to guess
-                    unknown_words.append(word)
+                    # No lexicon
+                    words_to_guess.append(word)
 
-            if num_known_words > 0:
-                _LOGGER.debug("Looked up %s/%s word(s)", num_known_words, len(words))
+            # Guess pronunciations
+            if words_to_guess:
+                _LOGGER.debug(
+                    "Guessing pronunciations for %s/%s word(s)",
+                    len(words_to_guess),
+                    len(words),
+                )
+                for word, pron_str in predict(
+                    words=words_to_guess,
+                    model_path=args.model,
+                    nbest=args.nbest,
+                    env=env,
+                ):
+                    print(word, pron_str, sep=args.word_separator)
 
-            # Remaining words will be guessed
-            words = unknown_words
+        # Get words from arguments or stdin
+        if args.words:
+            # Words from arguments
+            guess_words(args.words)
+        else:
+            # Words from stdin
+            if os.isatty(sys.stdin.fileno()):
+                print("Reading words from stdin. CTRL+D to end.", file=sys.stderr)
 
-        # Guess pronunciations
-        if words:
-            _LOGGER.debug("Guessing pronunciations for %s word(s)", len(words))
-            for word, pron_str in predict(
-                words=words, model_path=args.model, nbest=args.nbest, env=env
-            ):
-                print(word, pron_str, sep=args.word_separator)
+            if args.empty_line:
+                # Guess on every empty line
+                words_iter = iter(sys.stdin)
+                words = []
+
+                while True:
+                    try:
+                        word = next(words_iter).strip()
+                        if word:
+                            # Add to guess list
+                            words.append(word)
+                        elif words:
+                            # Guess and reset
+                            guess_words(words)
+                            words = []
+
+                    except StopIteration:
+                        break
+
+                if words:
+                    # Guess remaining words
+                    guess_words(words)
+            else:
+                # Read all words up front
+                words = sys.stdin.readlines()
+                guess_words(words)
+
     elif args.command == "train":
         # Train new model
         if args.corpus:
@@ -169,7 +201,12 @@ def get_args():
     predict_parser.add_argument(
         "--word-separator",
         default=" ",
-        help="Separator between words and pronunciations (default: space)",
+        help="Separator between words and pronunciations in lexicon (default: space)",
+    )
+    predict_parser.add_argument(
+        "--empty-line",
+        action="store_true",
+        help="Predict pronunciations of words so far every time a blank line is encountered",
     )
 
     # -------
