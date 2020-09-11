@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Friendlier command-line interface for phonetisaurus"""
 import argparse
+import gzip
 import logging
 import os
 import platform
+import shutil
 import sys
+import tempfile
 import time
 import typing
 from pathlib import Path
 
-from . import load_lexicon, maybe_gzip_open, predict, train
+from . import LEXICON_TYPE, load_lexicon, maybe_gzip_open, predict, train
 
 _DIR = Path(__file__).parent
 
@@ -52,119 +55,155 @@ def main():
     elif args.casing == "upper":
         casing = str.upper
 
+    # Extract model if necessary
+    if args.model.suffix == ".gz":
+        _LOGGER.debug("Extracting %s", args.model)
+        with tempfile.NamedTemporaryFile(
+            suffix=".fst", mode="w+b", delete=False
+        ) as temp_file:
+            with gzip.open(args.model, "rb") as model_file:
+                shutil.copyfileobj(model_file, temp_file)
+
+            # Rewind
+            temp_file.seek(0)
+
+            # Use temp file instead
+            args.model = Path(temp_file.name)
+
     # Run command
     if args.command == "predict":
         # Predict pronunciations
-
-        # Load optional lexicons
-        args.lexicon = [Path(lexicon) for lexicon in args.lexicon]
-        lexicon = None
-        for lexicon_path in args.lexicon:
-            if lexicon_path.is_file():
-                _LOGGER.debug("Loading lexicon from %s", lexicon_path)
-                with maybe_gzip_open(lexicon_path, "r") as lexicon_file:
-                    lexicon = load_lexicon(lexicon_file, lexicon=lexicon)
-
-        if lexicon:
-            _LOGGER.debug("Loaded pronunciations for %s word(s)", len(lexicon))
-
-        def guess_words(words: typing.List[str]):
-            """Look up or guess word pronunciations"""
-            words_to_guess = []
-
-            for word in words:
-                word = word.strip()
-                if casing:
-                    word = casing(word)
-
-                if lexicon:
-                    # Try to look up first in the lexicon
-                    word_prons = lexicon.get(word)
-                    if word_prons:
-                        for word_pron in word_prons[: args.nbest]:
-                            pron_str = " ".join(word_pron)
-                            print(word, pron_str, sep=args.word_separator)
-                    else:
-                        # Will need to guess
-                        words_to_guess.append(word)
-                else:
-                    # No lexicon
-                    words_to_guess.append(word)
-
-            # Guess pronunciations
-            if words_to_guess:
-                _LOGGER.debug(
-                    "Guessing pronunciations for %s/%s word(s)",
-                    len(words_to_guess),
-                    len(words),
-                )
-                for word, pron_str in predict(
-                    words=words_to_guess,
-                    model_path=args.model,
-                    nbest=args.nbest,
-                    env=env,
-                ):
-                    print(word, pron_str, sep=args.word_separator)
-
-        # Get words from arguments or stdin
-        if args.words:
-            # Words from arguments
-            guess_words(args.words)
-        else:
-            # Words from stdin
-            if os.isatty(sys.stdin.fileno()):
-                print("Reading words from stdin. CTRL+D to end.", file=sys.stderr)
-
-            if args.empty_line:
-                # Guess on every empty line
-                words_iter = iter(sys.stdin)
-                words = []
-
-                while True:
-                    try:
-                        word = next(words_iter).strip()
-                        if word:
-                            # Add to guess list
-                            words.append(word)
-                        elif words:
-                            # Guess and reset
-                            guess_words(words)
-                            words = []
-
-                    except StopIteration:
-                        break
-
-                if words:
-                    # Guess remaining words
-                    guess_words(words)
-            else:
-                # Read all words up front
-                words = sys.stdin.readlines()
-                guess_words(words)
-
+        do_predict(args, casing, env)
     elif args.command == "train":
         # Train new model
-        if args.corpus:
-            args.corpus = Path(args.corpus)
+        do_train(args, casing, env)
 
-        # Load lexicons
-        args.lexicon = [Path(lexicon) for lexicon in args.lexicon]
-        lexicon = None
-        for lexicon_path in args.lexicon:
-            if lexicon_path.is_file():
-                _LOGGER.debug("Loading lexicon from %s", lexicon_path)
-                with maybe_gzip_open(lexicon_path, "r") as lexicon_file:
-                    lexicon = load_lexicon(lexicon_file, lexicon=lexicon)
 
+# -----------------------------------------------------------------------------
+
+
+def do_predict(
+    args: argparse.Namespace,
+    casing: typing.Optional[typing.Callable[[str], str]] = None,
+    env: typing.Optional[typing.Dict[str, str]] = None,
+):
+    """Predict word pronunciations"""
+    # Load optional lexicons
+    args.lexicon = [Path(lexicon) for lexicon in args.lexicon]
+    lexicon = None
+    for lexicon_path in args.lexicon:
+        if lexicon_path.is_file():
+            _LOGGER.debug("Loading lexicon from %s", lexicon_path)
+            with maybe_gzip_open(lexicon_path, "r") as lexicon_file:
+                lexicon = load_lexicon(lexicon_file, lexicon=lexicon)
+
+    if lexicon:
         _LOGGER.debug("Loaded pronunciations for %s word(s)", len(lexicon))
 
-        _LOGGER.debug("Started training")
-        start_time = time.perf_counter()
+    def guess_words(words: typing.List[str]):
+        """Look up or guess word pronunciations"""
+        words_to_guess = []
 
-        train(lexicon=lexicon, model_path=args.model, corpus_path=args.corpus, env=env)
+        for word in words:
+            word = word.strip()
+            if casing:
+                word = casing(word)
 
-        end_time = time.perf_counter()
-        _LOGGER.debug("Finished training in %s second(s)", end_time - start_time)
+            if lexicon:
+                # Try to look up first in the lexicon
+                word_prons = lexicon.get(word)
+                if word_prons:
+                    for word_pron in word_prons[: args.nbest]:
+                        pron_str = " ".join(word_pron)
+                        print(word, pron_str, sep=args.word_separator)
+                else:
+                    # Will need to guess
+                    words_to_guess.append(word)
+            else:
+                # No lexicon
+                words_to_guess.append(word)
+
+        # Guess pronunciations
+        if words_to_guess:
+            _LOGGER.debug(
+                "Guessing pronunciations for %s/%s word(s)",
+                len(words_to_guess),
+                len(words),
+            )
+            for word, pron_str in predict(
+                words=words_to_guess, model_path=args.model, nbest=args.nbest, env=env
+            ):
+                print(word, pron_str, sep=args.word_separator)
+
+    # Get words from arguments or stdin
+    if args.words:
+        # Words from arguments
+        guess_words(args.words)
+    else:
+        # Words from stdin
+        if os.isatty(sys.stdin.fileno()):
+            print("Reading words from stdin. CTRL+D to end.", file=sys.stderr)
+
+        if args.empty_line:
+            # Guess on every empty line
+            words_iter = iter(sys.stdin)
+            words = []
+
+            while True:
+                try:
+                    word = next(words_iter).strip()
+                    if word:
+                        # Add to guess list
+                        words.append(word)
+                    elif words:
+                        # Guess and reset
+                        guess_words(words)
+                        words = []
+
+                except StopIteration:
+                    break
+
+            if words:
+                # Guess remaining words
+                guess_words(words)
+        else:
+            # Read all words up front
+            words = sys.stdin.readlines()
+            guess_words(words)
+
+
+# -----------------------------------------------------------------------------
+
+
+def do_train(
+    args,
+    casing: typing.Optional[typing.Callable[[str], str]] = None,
+    env: typing.Optional[typing.Dict[str, str]] = None,
+):
+    """Train new grapheme to phoneme model"""
+    if args.corpus:
+        # Path to prediction corpus.
+        # Used for "sounds-like" pronunciations.
+        args.corpus = Path(args.corpus)
+
+    # Load lexicons
+    args.lexicon = [Path(l) for l in args.lexicon]
+    lexicon: LEXICON_TYPE = {}
+    for lexicon_path in args.lexicon:
+        if lexicon_path.is_file():
+            _LOGGER.debug("Loading lexicon from %s", lexicon_path)
+            with maybe_gzip_open(lexicon_path, "r") as lexicon_file:
+                lexicon = load_lexicon(lexicon_file, lexicon=lexicon)
+
+    _LOGGER.debug("Loaded pronunciations for %s word(s)", len(lexicon))
+
+    _LOGGER.debug("Started training")
+    start_time = time.perf_counter()
+
+    train(lexicon=lexicon, model_path=args.model, corpus_path=args.corpus, env=env)
+
+    end_time = time.perf_counter()
+    _LOGGER.debug("Finished training in %s second(s)", end_time - start_time)
 
 
 # -----------------------------------------------------------------------------
