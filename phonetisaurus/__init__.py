@@ -2,6 +2,8 @@
 import gzip
 import io
 import logging
+import os
+import platform
 import re
 import shlex
 import shutil
@@ -12,6 +14,8 @@ from collections import defaultdict
 from pathlib import Path
 
 _LOGGER = logging.getLogger("phonetisaurus")
+
+_DIR = Path(__file__).parent
 
 # Excludes 0xA0
 _WHITESPACE = re.compile(r"[ \t]+")
@@ -27,8 +31,11 @@ def predict(
     model_path: typing.Union[str, Path],
     nbest: int = 1,
     env: typing.Optional[typing.Dict[str, str]] = None,
-) -> typing.Iterable[typing.Tuple[str, str]]:
+) -> typing.Iterable[typing.Tuple[str, typing.List[str]]]:
     """Guess one or more pronunciations for a set of words."""
+    if env is None:
+        env = guess_environment()
+
     with tempfile.NamedTemporaryFile(suffix=".txt", mode="w+") as temp_file:
         # Write words to a temporary file
         for word in words:
@@ -58,8 +65,8 @@ def predict(
             for line in result_file:
                 line = line.strip()
                 if line:
-                    word, pron_str = _WHITESPACE.split(line, maxsplit=1)
-                    yield (word, pron_str)
+                    word, *phonemes = _WHITESPACE.split(line)
+                    yield (word, phonemes)
 
 
 # -----------------------------------------------------------------------------
@@ -162,6 +169,27 @@ def load_lexicon(
             lexicon[word] = [phonemes]
 
     return lexicon
+
+
+# -----------------------------------------------------------------------------
+
+
+def guess_environment(machine: typing.Optional[str] = None) -> typing.Dict[str, str]:
+    """Guess PATH and LD_LIBRARY_PATH based on machine type"""
+    if not machine:
+        machine = platform.machine()
+
+    # Set bin/lib environment
+    bin_dir = _DIR / "bin" / machine
+    lib_dir = _DIR / "lib" / machine
+
+    env = os.environ.copy()
+    env = {
+        "PATH": str(bin_dir) + ":" + env.get("PATH", ""),
+        "LD_LIBRARY_PATH": str(lib_dir) + ":" + env.get("LD_LIBRARY", ""),
+    }
+
+    return env
 
 
 # -----------------------------------------------------------------------------

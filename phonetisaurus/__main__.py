@@ -4,7 +4,6 @@ import argparse
 import gzip
 import logging
 import os
-import platform
 import shutil
 import sys
 import tempfile
@@ -12,7 +11,14 @@ import time
 import typing
 from pathlib import Path
 
-from . import LEXICON_TYPE, load_lexicon, maybe_gzip_open, predict, train
+from . import (
+    LEXICON_TYPE,
+    guess_environment,
+    load_lexicon,
+    maybe_gzip_open,
+    predict,
+    train,
+)
 
 _DIR = Path(__file__).parent
 
@@ -30,23 +36,12 @@ def main():
     else:
         logging.basicConfig(level=logging.INFO)
 
-    if not args.machine:
-        args.machine = platform.machine()
-
     args.model = Path(args.model)
 
     _LOGGER.debug(args)
 
     # Set bin/lib environment
-    bin_dir = _DIR / "bin" / args.machine
-    lib_dir = _DIR / "lib" / args.machine
-    _LOGGER.debug("bin=%s, lib=%s", bin_dir, lib_dir)
-
-    env = os.environ.copy()
-    env = {
-        "PATH": str(bin_dir) + ":" + env.get("PATH", ""),
-        "LD_LIBRARY_PATH": str(lib_dir) + ":" + env.get("LD_LIBRARY", ""),
-    }
+    env = guess_environment(args.machine)
 
     # Set word casing
     casing = None
@@ -95,7 +90,12 @@ def do_predict(
         if lexicon_path.is_file():
             _LOGGER.debug("Loading lexicon from %s", lexicon_path)
             with maybe_gzip_open(lexicon_path, "r") as lexicon_file:
-                lexicon = load_lexicon(lexicon_file, lexicon=lexicon)
+                lexicon = load_lexicon(
+                    lexicon_file,
+                    lexicon=lexicon,
+                    word_separator=args.lexicon_word_separator,
+                    phoneme_separator=args.lexicon_phoneme_separator,
+                )
 
     if lexicon:
         _LOGGER.debug("Loaded pronunciations for %s word(s)", len(lexicon))
@@ -130,9 +130,10 @@ def do_predict(
                 len(words_to_guess),
                 len(words),
             )
-            for word, pron_str in predict(
+            for word, phonemes in predict(
                 words=words_to_guess, model_path=args.model, nbest=args.nbest, env=env
             ):
+                pron_str = args.phoneme_separator.join(phonemes)
                 print(word, pron_str, sep=args.word_separator)
 
     # Get words from arguments or stdin
@@ -193,7 +194,12 @@ def do_train(
         if lexicon_path.is_file():
             _LOGGER.debug("Loading lexicon from %s", lexicon_path)
             with maybe_gzip_open(lexicon_path, "r") as lexicon_file:
-                lexicon = load_lexicon(lexicon_file, lexicon=lexicon)
+                lexicon = load_lexicon(
+                    lexicon_file,
+                    lexicon=lexicon,
+                    word_separator=args.lexicon_word_separator,
+                    phoneme_separator=args.lexicon_phoneme_separator,
+                )
 
     _LOGGER.debug("Loaded pronunciations for %s word(s)", len(lexicon))
 
@@ -240,7 +246,22 @@ def get_args():
     predict_parser.add_argument(
         "--word-separator",
         default=" ",
-        help="Separator between words and pronunciations in lexicon (default: space)",
+        help="Separator between words and phonemes in output (default: space)",
+    )
+    predict_parser.add_argument(
+        "--phoneme-separator",
+        default=" ",
+        help="Separator between phonemes in output (default: space)",
+    )
+    predict_parser.add_argument(
+        "--lexicon-word-separator",
+        default="\\s+",
+        help="Separator regex between words and pronunciations in lexicon (default: \\s+)",
+    )
+    predict_parser.add_argument(
+        "--lexicon-phoneme-separator",
+        default="\\s+",
+        help="Separator regex between phonemes in each lexicon entry (default: \\s+)",
     )
     predict_parser.add_argument(
         "--empty-line",
@@ -260,12 +281,12 @@ def get_args():
     )
     train_parser.add_argument("--corpus", help="Path to write trained g2p corpus")
     train_parser.add_argument(
-        "--word-separator",
+        "--lexicon-word-separator",
         default="\\s+",
         help="Separator regex between words in each lexicon entry (default: \\s+)",
     )
     train_parser.add_argument(
-        "--phoneme-separator",
+        "--lexicon-phoneme-separator",
         default="\\s+",
         help="Separator regex between phonemes in each lexicon entry (default: \\s+)",
     )
