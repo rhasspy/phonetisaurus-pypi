@@ -27,7 +27,7 @@ LEXICON_TYPE = typing.Dict[str, typing.List[typing.List[str]]]
 
 
 def predict(
-    words: typing.List[str],
+    words: typing.Iterable[str],
     model_path: typing.Union[str, Path],
     nbest: int = 1,
     env: typing.Optional[typing.Dict[str, str]] = None,
