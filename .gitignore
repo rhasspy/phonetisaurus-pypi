@@ -4,6 +4,3 @@ __pycache__/
 /.venv/
 /build/
 /dist/
-
-/phonetisaurus/bin/
-/phonetisaurus/lib/
