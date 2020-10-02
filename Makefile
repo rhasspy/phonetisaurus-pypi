@@ -18,4 +18,4 @@ dist:
 	rm -rf build
 	PLATFORM=armv7l python3 setup.py bdist_wheel --plat-name=linux_armv7l
 	rm -rf build
-	PLATFORM=armv8 python3 setup.py bdist_wheel --plat-name=linux_armv8
+	PLATFORM=aarch64 python3 setup.py bdist_wheel --plat-name=linux_aarch64
