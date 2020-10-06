@@ -17,9 +17,20 @@ Includes pre-built binaries for:
 
 ## Installing
 
+For `x86_64` systems:
+
 ```sh
 $ pip install phonetisaurus
 ```
+
+For Raspberry Pi, see [Releases](https://github.com/rhasspy/phonetisaurus-pypi/releases) for compatible wheels:
+
+* Raspberry Pi 0/1
+    * `phonetisaurus-<VERSION>-py3-none-linux_armv6l.whl`
+* Raspberry Pi 2/3/4 (32-bit)
+    * `phonetisaurus-<VERSION>-py3-none-linux_armv7l.whl`
+* Raspberry Pi 3/4 (64-bit)
+    * `phonetisaurus-<VERSION>-py3-none-linux_aarch64.whl`
 
 ## Training
 
