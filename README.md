@@ -7,12 +7,13 @@ Includes pre-built binaries for:
 * `x86_64` - desktop/laptop/server (64-bit)
 * `armv6l` - Raspberry Pi 0/1
 * `armv7l` - Raspberry Pi 2/3/4 (32-bit)
-* `armv8` - Raspberry Pi 3/4 (64-bit)
+* `aarch64` - Raspberry Pi 3/4 (64-bit)
 
 ## Requirements
 
 * Python 3.7+
 * Linux
+    * Tested with Debian Buster
 
 ## Installing
 

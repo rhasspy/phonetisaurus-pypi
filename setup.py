@@ -37,6 +37,7 @@ lib_files = [str(f.relative_to(module_dir)) for f in lib_dir.rglob("*")]
 
 setuptools.setup(
     name="phonetisaurus",
+    description="Python wrapper for phonetisaurus grapheme to phoneme tool",
     version=version,
     author="Michael Hansen",
     author_email="mike@rhasspy.org",
