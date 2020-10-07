@@ -149,24 +149,27 @@ def load_lexicon(
     else:
         phoneme_regex = _WHITESPACE
 
-    for line in lexicon_file:
+    for line_idx, line in enumerate(lexicon_file):
         line = line.strip()
         if not line:
             continue
 
-        word, phoneme_str = word_regex.split(line, maxsplit=1)
-        phonemes = phoneme_regex.split(phoneme_str)
+        try:
+            word, phoneme_str = word_regex.split(line, maxsplit=1)
+            phonemes = phoneme_regex.split(phoneme_str)
 
-        word_match = _WORD_WITH_NUMBER.match(word)
-        if word_match:
-            # Strip (n) from word(n)
-            word = word_match.group(1)
+            word_match = _WORD_WITH_NUMBER.match(word)
+            if word_match:
+                # Strip (n) from word(n)
+                word = word_match.group(1)
 
-        word_prons = lexicon.get(word)
-        if word_prons:
-            word_prons.append(phonemes)
-        else:
-            lexicon[word] = [phonemes]
+            word_prons = lexicon.get(word)
+            if word_prons:
+                word_prons.append(phonemes)
+            else:
+                lexicon[word] = [phonemes]
+        except Exception:
+            _LOGGER.exception("Line %s: %s", line_idx + 1, line)
 
     return lexicon
 
