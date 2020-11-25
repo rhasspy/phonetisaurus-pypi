@@ -82,6 +82,9 @@ def train(
     env: typing.Optional[typing.Dict[str, str]] = None,
 ):
     """Create a new grapheme to phoneme model based on a lexion"""
+    if env is None:
+        env = guess_environment()
+
     # Create directories
     model_path = Path(model_path)
     model_path.parent.mkdir(parents=True, exist_ok=True)
@@ -115,7 +118,7 @@ def train(
             ]
 
             _LOGGER.debug(train_cmd)
-            subprocess.check_call(train_cmd, cwd=temp_dir_str)
+            subprocess.check_call(train_cmd, cwd=temp_dir_str, env=env)
 
             model_fst = temp_dir / "train" / "model.fst"
             shutil.copy2(model_fst, model_path)
