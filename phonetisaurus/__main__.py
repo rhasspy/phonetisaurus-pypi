@@ -50,23 +50,23 @@ def main():
     elif args.casing == "upper":
         casing = str.upper
 
-    # Extract model if necessary
-    if args.model.suffix == ".gz":
-        _LOGGER.debug("Extracting %s", args.model)
-        with tempfile.NamedTemporaryFile(
-            suffix=".fst", mode="w+b", delete=False
-        ) as temp_file:
-            with gzip.open(args.model, "rb") as model_file:
-                shutil.copyfileobj(model_file, temp_file)
-
-            # Rewind
-            temp_file.seek(0)
-
-            # Use temp file instead
-            args.model = Path(temp_file.name)
-
     # Run command
     if args.command == "predict":
+        # Extract model if necessary
+        if args.model.suffix == ".gz":
+            _LOGGER.debug("Extracting %s", args.model)
+            with tempfile.NamedTemporaryFile(
+                suffix=".fst", mode="w+b", delete=False
+            ) as temp_file:
+                with gzip.open(args.model, "rb") as model_file:
+                    shutil.copyfileobj(model_file, temp_file)
+
+                # Rewind
+                temp_file.seek(0)
+
+                # Use temp file instead
+                args.model = Path(temp_file.name)
+
         # Predict pronunciations
         do_predict(args, casing, env)
     elif args.command == "train":
@@ -95,6 +95,7 @@ def do_predict(
                     lexicon=lexicon,
                     word_separator=args.lexicon_word_separator,
                     phoneme_separator=args.lexicon_phoneme_separator,
+                    casing=casing,
                 )
 
     if lexicon:
@@ -199,6 +200,7 @@ def do_train(
                     lexicon=lexicon,
                     word_separator=args.lexicon_word_separator,
                     phoneme_separator=args.lexicon_phoneme_separator,
+                    casing=casing,
                 )
 
     _LOGGER.debug("Loaded pronunciations for %s word(s)", len(lexicon))

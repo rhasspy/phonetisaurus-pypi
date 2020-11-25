@@ -138,6 +138,7 @@ def load_lexicon(
     word_separator: typing.Optional[str] = None,
     phoneme_separator: typing.Optional[str] = None,
     lexicon: typing.Optional[LEXICON_TYPE] = None,
+    casing: typing.Optional[typing.Callable[[str], str]] = None,
 ) -> LEXICON_TYPE:
     """Load a CMU-style lexicon."""
     lexicon = lexicon or defaultdict(list)
@@ -165,6 +166,9 @@ def load_lexicon(
             if word_match:
                 # Strip (n) from word(n)
                 word = word_match.group(1)
+
+            if casing:
+                word = casing(word)
 
             word_prons = lexicon.get(word)
             if word_prons:
