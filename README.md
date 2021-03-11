@@ -11,7 +11,7 @@ Includes pre-built binaries for:
 
 ## Requirements
 
-* Python 3.7+
+* Python 3.6+
 * Linux
     * Tested with Debian Buster
 
